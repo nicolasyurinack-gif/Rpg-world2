@@ -1,0 +1,224 @@
+<!DOCTYPE html><html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Vaelthar</title><style>
+body{
+ margin:0;
+ font-family:'Segoe UI',sans-serif;
+ background:radial-gradient(circle at center,#050816,#020617);
+ color:#e2e8f0;
+ overflow:hidden;
+}
+
+header{
+ text-align:center;
+ padding:10px;
+ background:rgba(2,6,23,0.9);
+ border-bottom:1px solid #1e293b;
+}
+
+#layout{
+ display:flex;
+ height:92vh;
+}
+
+/* ===== MAPA ZOOMÁVEL ===== */
+#mapContainer{
+ flex:1;
+ position:relative;
+ overflow:hidden;
+ margin:10px;
+ border-radius:20px;
+ border:1px solid #1e293b;
+ background:radial-gradient(circle at 30% 40%,rgba(99,102,241,0.15),transparent 50%),
+ radial-gradient(circle at 70% 60%,rgba(34,211,238,0.12),transparent 50%),
+ linear-gradient(180deg,#0b1220,#020617);
+}
+
+#map{
+ position:absolute;
+ width:100%;
+ height:100%;
+ transform:scale(1);
+ transition:transform 0.2s;
+}
+
+#stars{
+ position:absolute;
+ inset:0;
+ background-image:radial-gradient(white 1px,transparent 1px);
+ background-size:40px 40px;
+ opacity:0.15;
+ animation:move 80s linear infinite;
+}
+
+@keyframes move{
+ from{transform:translate(0,0)}
+ to{transform:translate(-40px,-40px)}
+}
+
+/* ILHAS */
+.island{
+ position:absolute;
+ padding:10px 14px;
+ border-radius:999px;
+ cursor:pointer;
+ font-weight:bold;
+ font-size:13px;
+ backdrop-filter:blur(6px);
+ border:1px solid rgba(255,255,255,0.2);
+ transition:0.25s;
+ user-select:none;
+}
+
+.island:hover{
+ transform:scale(1.2);
+ box-shadow:0 0 25px rgba(99,102,241,0.5);
+}
+
+.noroia{background:rgba(148,163,184,0.15)}
+.oroia{background:rgba(234,179,8,0.15)}
+.kuri{background:rgba(34,197,94,0.15)}
+.inform{background:rgba(168,85,247,0.15)}
+.crono{background:rgba(59,130,246,0.15)}
+
+/* SIDEBAR */
+#side{
+ width:280px;
+ background:rgba(2,6,23,0.95);
+ border-left:1px solid #1e293b;
+ padding:10px;
+ overflow:auto;
+}
+
+button{
+ width:100%;
+ margin:4px 0;
+ padding:8px;
+ border:none;
+ border-radius:8px;
+ background:#1e293b;
+ color:white;
+ cursor:pointer;
+}
+
+button:hover{background:#334155}
+.selected{background:#6366f1}
+
+#chat{
+ height:55vh;
+ overflow:auto;
+ background:rgba(2,6,23,0.6);
+ border:1px solid #1e293b;
+ border-radius:10px;
+ padding:10px;
+}
+
+input{
+ width:100%;
+ padding:10px;
+ border-radius:10px;
+ border:1px solid #1e293b;
+ background:#020617;
+ color:white;
+}
+
+.msg-p{color:#38bdf8}
+.msg-n{color:#a78bfa}
+
+</style></head><body><header>
+<h1>🌌 VAELTHAR — WORLD MAP</h1>
+</header><div id="layout"><div id="mapContainer" onwheel="zoom(event)">
+<div id="stars"></div><div id="map"><div class="island noroia" style="top:20%;left:15%" onclick="selectIsland('Noroia')">🏰 Noroia</div>
+<div class="island oroia" style="top:65%;left:20%" onclick="selectIsland('Oroiamata')">💰 Oroiamata</div>
+<div class="island kuri" style="top:40%;left:45%" onclick="selectIsland('KuriKuligan')">🌿 KuriKuligan</div>
+<div class="island inform" style="top:15%;left:70%" onclick="selectIsland('Informonos')">🌀 Informonos</div>
+<div class="island crono" style="top:70%;left:75%" onclick="selectIsland('Cronomanaca')">⏳ Cronomanaca</div></div>
+</div><div id="side"><h3>🌍 Ilha</h3>
+<div id="title"></div><h3>👤 NPCs</h3>
+<div id="npcList"></div><h3>💬 Chat</h3>
+<div id="chat"></div><input id="msg" placeholder="Falar..." onkeydown="if(event.key==='Enter') send()"></div></div><script>
+
+let island=null,npc=null,scale=1;
+
+// ===== MEMÓRIA REAL =====
+let memory=JSON.parse(localStorage.getItem('npcMemory')||'{}');
+
+function saveMemory(){
+ localStorage.setItem('npcMemory',JSON.stringify(memory));
+}
+
+// ===== NPCS COM ID =====
+function makeNPC(name){
+ return {
+  id: name+Math.random(),
+  name
+ }
+}
+
+const world={
+ Noroia:["Rei","Sacerdote","Cavaleiro"].map(makeNPC),
+ Oroiamata:["Mercador","Ladrão","Nobre"].map(makeNPC),
+ KuriKuligan:["Druida","Caçador","Espírito"].map(makeNPC),
+ Informonos:["Entidade","Eco","Guardião"].map(makeNPC),
+ Cronomanaca:["Viajante","Relógio Vivo","Fragmento"].map(makeNPC)
+};
+
+function zoom(e){
+ e.preventDefault();
+ scale+=e.deltaY*-0.001;
+ scale=Math.min(Math.max(0.7,scale),2);
+ document.getElementById('map').style.transform=`scale(${scale})`;
+}
+
+function selectIsland(i){
+ island=i;
+ document.getElementById('title').innerText=i;
+
+ let div=document.getElementById('npcList');
+ div.innerHTML='';
+
+ world[i].forEach(n=>{
+  let b=document.createElement('button');
+  b.innerText=n.name;
+  b.onclick=()=>npc=n;
+  div.appendChild(b);
+ });
+}
+
+function send(){
+ let input=document.getElementById('msg');
+ if(!input.value||!npc)return;
+
+ let playerMsg=input.value;
+ add("Você: "+playerMsg);
+
+ // ===== MEMÓRIA =====
+ let key=npc.id;
+ if(!memory[key])memory[key]=[];
+
+ memory[key].push(playerMsg);
+ memory[key]=memory[key].slice(-5);
+ saveMemory();
+
+ let response;
+
+ if(memory[key].length>2){
+  response="Eu lembro de você... você já falou comigo antes.";
+ }else{
+  response="...interessante.";
+ }
+
+ setTimeout(()=>add(npc.name+": "+response),300);
+
+ input.value='';
+}
+
+function add(t){
+ let c=document.getElementById('chat');
+ c.innerHTML+=`<p class='msg-p'>${t}</p>`;
+ c.scrollTop=c.scrollHeight;
+}
+
+</script></body>
+  </html>
